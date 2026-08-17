@@ -1,0 +1,58 @@
+name: Build and Deploy
+
+# Runs automatically every time you push to main
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  # -------------------------------------------------------------
+  # JOB 1: Build the Docker image and push it to Docker Hub
+  # -------------------------------------------------------------
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # -------------------------------------------------------------
+  # JOB 2: SSH into the EC2 instance and redeploy the new image
+  # -------------------------------------------------------------
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
+            docker stop todo-app || true
+            docker rm todo-app || true
+            docker run -d \
+              --name todo-app \
+              -p 80:5000 \
+              -v todo-data:/app/data \
+              --restart unless-stopped \
+              ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
+            docker image prune -f
