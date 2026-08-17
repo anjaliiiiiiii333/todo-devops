@@ -1,45 +1,39 @@
 name: Build and Deploy
 
-# Runs automatically every time you push to main
 on:
   push:
     branches: [ main ]
 
 jobs:
-  # -------------------------------------------------------------
-  # JOB 1: Build the Docker image and push it to Docker Hub
-  # -------------------------------------------------------------
   build-and-push:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:${{ github.sha }}
-          
 
-  # -------------------------------------------------------------
-  # JOB 2: SSH into the EC2 instance and redeploy the new image
-  # -------------------------------------------------------------
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+
     steps:
       - name: Deploy to EC2 over SSH
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
